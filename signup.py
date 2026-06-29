@@ -15,6 +15,14 @@ OUTPUT_FILE = "accounts.txt"
 
 PROXY = "http://RXClbNH987_lightning_proxy-country-any:1853reph11@resident.lightningproxies.net:8080"
 
+# Headers to avoid being blocked by the API gateway/CDN
+FB_HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 ADJECTIVES = ["Cool", "Epic", "Swift", "Dark", "Bright", "Silent", "Wild", "Lucky", "Brave", "Mighty", "Crazy", "Happy", "Royal", "Golden", "Silver", "Shadow", "Storm", "Fire", "Ice", "Thunder"]
 NOUNS = ["Wolf", "Dragon", "Phoenix", "Tiger", "Eagle", "Lion", "Shark", "Bear", "Hawk", "Cobra", "Panther", "Fox", "Raven", "Falcon", "Jaguar", "Blade", "Knight", "Warrior", "Hunter", "Ranger"]
 NAMES = ["Alex", "Max", "Jake", "Ryan", "Kyle", "Mike", "Nick", "Sam", "Chris", "Matt", "Luke", "Zack", "Cole", "Drew", "Josh", "Evan", "Adam", "Eric", "Mark", "Leo"]
@@ -59,12 +67,13 @@ async def get_csrf(session: aiohttp.ClientSession) -> str:
 
 
 async def check_balance() -> dict:
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(headers=FB_HEADERS) as session:
         for attempt in range(3):
             try:
                 async with session.post(f"{FUNBYPASS_BASE_URL}/getBalance", json={"clientKey": FUNBYPASS_API_KEY}) as resp:
                     if resp.status != 200:
-                        print(f"[*] Retry {attempt+1}/3 (status {resp.status})...")
+                        body = await resp.text()
+                        print(f"[*] Retry {attempt+1}/3 (status {resp.status}): {body[:120]}")
                         await asyncio.sleep(2)
                         continue
                     result = await resp.json()
@@ -80,7 +89,7 @@ async def check_balance() -> dict:
 async def solve_captcha(proxy: str) -> dict:
     print("[*] Solving captcha (this may take 30-60 seconds)...")
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(headers=FB_HEADERS) as session:
         task = {
             "type": "FunCaptchaTask",
             "websiteURL": "https://www.roblox.com",
