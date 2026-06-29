@@ -363,7 +363,7 @@ async def main():
     print("=" * 50)
     print("Roblox Account Generator")
     print("=" * 50)
-    print("Using Legion pool-udp LA proxies (fresh session per request)")
+    print("Using Legion pool-udp US proxies (fresh session per request)")
 
     if not HAS_SOCKS:
         print("\n[!] aiohttp_socks is NOT installed - Roblox requests will use")
