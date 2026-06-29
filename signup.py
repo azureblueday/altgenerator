@@ -31,9 +31,10 @@ USE_BLOB = True
 # to False to experiment if you keep getting ERROR_SOLVE_FAILED: pow.
 ENABLE_POW = True
 
-# How many times to retry a single account when the solve fails
-# (FunBypass intermittently returns ERROR_MAKE_REQUEST / pow).
-MAX_ATTEMPTS = 8
+# How many times to retry a single account when the solve fails.
+# FunBypass intermittently returns ERROR_MAKE_REQUEST / pow and auto-refunds
+# failed tasks, so cranking this up is basically free until a solve lands.
+MAX_ATTEMPTS = 25
 
 # Proxies: socks5://user:pass@host:port  (rotated per account)
 # Legion proxy template. {SID} is replaced with a fresh random session ID
@@ -283,7 +284,6 @@ async def signup_once() -> dict:
         # 4. Decode challenge metadata -> blob + unifiedCaptchaId + actionType
         try:
             meta = json.loads(base64.b64decode(challenge_metadata_b64))
-            print(f"  [debug] challenge meta: {meta}")
             blob = meta.get("dataExchangeBlob") or meta.get("blob")
             unified_captcha_id = meta.get("unifiedCaptchaId")
             action_type = meta.get("actionType") or "Generic"
@@ -362,7 +362,7 @@ async def signup() -> dict:
         except Exception as e:
             last_err = str(e) or repr(e)
             print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} error ({last_err}), retrying...")
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
     return {"success": False, "error": last_err}
 
 
