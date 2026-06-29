@@ -84,8 +84,8 @@ class FunBypass:
             task["data"] = data
 
         async with session.post(f"{self.BASE_URL}/createTask", json={"clientKey": self.client_key, "task": task}) as resp:
-            result = await resp.json()
-            if result["errorId"] != 0:
+            result = await resp.json(content_type=None)
+            if result.get("errorId", 1) != 0:
                 raise Exception(f"{result.get('errorCode')}: {result.get('errorDescription')}")
             return result["taskId"]
 
@@ -93,17 +93,30 @@ class FunBypass:
         elapsed = 0
         while elapsed < timeout:
             async with session.get(f"{self.BASE_URL}/getTaskResult/{task_id}") as resp:
-                result = await resp.json()
+                try:
+                    result = await resp.json(content_type=None)
+                except Exception:
+                    body = await resp.text()
+                    print(f"    [funbypass] non-JSON ({resp.status}): {body[:120]}")
+                    await asyncio.sleep(interval)
+                    elapsed += interval
+                    continue
 
             status = result.get("status")
             if int(elapsed) % 5 == 0:
                 print(f"    [funbypass] status={status} ({int(elapsed)}s)")
 
             if status == "ready":
-                if result["errorId"] == 0:
-                    return result["solution"]["token"]
+                if result.get("errorId", 0) == 0:
+                    sol = result.get("solution") or {}
+                    token = sol.get("token")
+                    if token:
+                        return token
+                    print(f"    [funbypass] ready but no token. raw: {result}")
+                    raise Exception("ready without token")
                 raise Exception(f"{result.get('errorCode')}: {result.get('errorDescription')}")
             if status == "failure":
+                print(f"    [funbypass] failure raw: {result}")
                 raise Exception(f"{result.get('errorCode')}: {result.get('errorDescription')}")
 
             await asyncio.sleep(interval)
