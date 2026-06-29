@@ -23,11 +23,11 @@ USE_BLOB = True
 
 # Proxies: socks5://user:pass@host:port  (rotated per account)
 PROXIES = [
-    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-jzctm6154b_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-veudj8l3ap_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-6kys2vifd5_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-0gmmanexcp_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-0qv1hwdbrh_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-ushu47nvol_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-xdcp9ftd4j_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-qr1b7dtnum_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-qdpseqiwiz_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-2y17t0rrov_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
 ]
 
 # ─────────────────────────────────────────────────────────────
@@ -212,6 +212,7 @@ async def signup_once(proxy: str) -> dict:
 
             challenge_id = resp.headers.get("rblx-challenge-id")
             challenge_metadata_b64 = resp.headers.get("rblx-challenge-metadata")
+            challenge_type = resp.headers.get("rblx-challenge-type", "captcha")
 
             if not challenge_id or not challenge_metadata_b64:
                 try:
@@ -247,28 +248,29 @@ async def signup_once(proxy: str) -> dict:
             )
         print("  [+] Captcha solved!")
 
-        # 6. Continue the challenge with the solved token (reuse actionType from Roblox)
+        # 6. Build the solved challenge metadata (useContinueMode=false -> no /continue call)
         solved_meta = json.dumps({
             "unifiedCaptchaId": unified_captcha_id,
             "captchaToken": token,
             "actionType": action_type,
         })
-        continue_meta_b64 = base64.b64encode(solved_meta.encode()).decode()
+        solved_meta_b64 = base64.b64encode(solved_meta.encode()).decode()
 
-        async with session.post("https://apis.roblox.com/challenge/v1/continue", json={
-            "challengeId": challenge_id,
-            "challengeType": "captcha",
-            "challengeMetadata": solved_meta,
-        }) as cont_resp:
-            cont_text = await cont_resp.text()
-            print(f"  [debug] continue ({cont_resp.status}): {cont_text[:160]}")
+        use_continue = bool(meta.get("sharedParameters", {}).get("useContinueMode"))
+        if use_continue:
+            async with session.post("https://apis.roblox.com/challenge/v1/continue", json={
+                "challengeId": challenge_id,
+                "challengeType": challenge_type,
+                "challengeMetadata": solved_meta,
+            }) as cont_resp:
+                print(f"  [debug] continue ({cont_resp.status}): {(await cont_resp.text())[:160]}")
 
-        # 7. Re-submit signup with challenge headers
+        # 7. Re-submit signup directly with the solved challenge headers
         csrf = await get_csrf(session)
         session.headers["x-csrf-token"] = csrf
         session.headers["rblx-challenge-id"] = challenge_id
-        session.headers["rblx-challenge-type"] = "captcha"
-        session.headers["rblx-challenge-metadata"] = continue_meta_b64
+        session.headers["rblx-challenge-type"] = challenge_type
+        session.headers["rblx-challenge-metadata"] = solved_meta_b64
 
         print("  [*] Finalizing signup...")
         async with session.post("https://auth.roblox.com/v2/signup", json=payload) as resp:
