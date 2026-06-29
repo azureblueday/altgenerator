@@ -6,7 +6,7 @@ import time
 import json
 from datetime import datetime
 
-FUNBYPASS_API_KEY = "FUN-33KUYP1WTQP4W91M"
+FUNBYPASS_API_KEY = "FUN-GDZ8I8EUY01J0C97"
 FUNBYPASS_BASE_URL = "https://api.funbypass.com"
 ROBLOX_SIGNUP_URL = "https://auth.roblox.com/v2/signup"
 ROBLOX_USERNAME_CHECK_URL = "https://auth.roblox.com/v1/usernames/validate"
