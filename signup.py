@@ -12,6 +12,10 @@ ROBLOX_USERNAME_CHECK_URL = "https://auth.roblox.com/v1/usernames/validate"
 ROBLOX_CAPTCHA_KEY = "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F"
 OUTPUT_FILE = "accounts.txt"
 
+# Set your proxy here (required for captcha solving)
+# Format: http://user:pass@ip:port or http://ip:port
+PROXY = ""  # Example: "http://user:pass@123.45.67.89:8080"
+
 ADJECTIVES = [
     "Cool", "Epic", "Swift", "Dark", "Bright", "Silent", "Wild", "Lucky", "Brave", "Mighty",
     "Crazy", "Happy", "Sneaky", "Royal", "Golden", "Silver", "Crystal", "Shadow", "Storm", "Fire",
@@ -82,42 +86,51 @@ async def get_csrf_token(session: aiohttp.ClientSession) -> str:
         return ""
 
 
-async def solve_captcha() -> dict:
+async def solve_captcha(proxy: str, data_blob: str = None) -> dict:
     async with aiohttp.ClientSession() as session:
+        task = {
+            "type": "FunCaptchaTask",
+            "websiteURL": "https://www.roblox.com",
+            "websitePublicKey": ROBLOX_CAPTCHA_KEY,
+            "websiteSubdomain": "roblox-api",
+            "proxy": proxy,
+            "enablePOW": True,
+        }
+
+        if data_blob:
+            task["data"] = data_blob
+
         payload = {
             "clientKey": FUNBYPASS_API_KEY,
-            "task": {
-                "type": "FunCaptchaTask",
-                "websiteURL": "https://www.roblox.com/account/signupredir",
-                "websitePublicKey": ROBLOX_CAPTCHA_KEY,
-                "websiteSubdomain": "roblox-api",
-            }
+            "task": task
         }
 
         async with session.post(f"{FUNBYPASS_BASE_URL}/createTask", json=payload) as resp:
             result = await resp.json()
             if result.get("errorId") != 0:
-                return {"success": False, "error": result.get("errorDescription", "Task creation failed")}
+                return {"success": False, "error": result.get("errorDescription", result.get("errorCode", "Task creation failed"))}
             task_id = result.get("taskId")
+            print(f"[*] Captcha task created: {task_id}")
 
-        start = time.time()
-        while time.time() - start < 120:
-            await asyncio.sleep(1)
+        for _ in range(300):
+            await asyncio.sleep(0.5)
             async with session.get(f"{FUNBYPASS_BASE_URL}/getTaskResult/{task_id}") as resp:
                 result = await resp.json()
                 if result.get("status") == "ready":
-                    return {"success": True, "token": result.get("solution", {}).get("token")}
-                elif result.get("status") == "failure" or result.get("errorId") == 1:
+                    if result.get("errorId") == 0:
+                        return {"success": True, "token": result.get("solution", {}).get("token")}
                     return {"success": False, "error": result.get("errorDescription", "Solve failed")}
+                elif result.get("status") == "failure":
+                    return {"success": False, "error": result.get("errorDescription", result.get("errorCode", "Solve failed"))}
 
         return {"success": False, "error": "Timeout"}
 
 
-async def signup() -> dict:
+async def signup(proxy: str = None) -> dict:
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Origin": "https://www.roblox.com",
         "Referer": "https://www.roblox.com/",
     }
@@ -139,6 +152,16 @@ async def signup() -> dict:
         password = generate_password()
         birthday = generate_birthday()
 
+        # Solve captcha first
+        if not proxy:
+            return {"success": False, "error": "Proxy required for captcha solving. Set PROXY in script."}
+
+        print("[*] Solving captcha...")
+        captcha = await solve_captcha(proxy)
+        if not captcha.get("success"):
+            return {"success": False, "error": f"Captcha failed: {captcha.get('error')}"}
+        print("[+] Captcha solved!")
+
         csrf = await get_csrf_token(session)
         if csrf:
             session.headers.update({"x-csrf-token": csrf})
@@ -150,43 +173,26 @@ async def signup() -> dict:
             "gender": random.randint(1, 2),
             "isTosAgreementBoxChecked": True,
             "agreementIds": [],
+            "captchaToken": captcha.get("token"),
+            "captchaProvider": "PROVIDER_ARKOSE_LABS",
         }
 
-        print("[*] Attempting signup...")
+        print("[*] Creating account...")
         async with session.post(ROBLOX_SIGNUP_URL, json=payload) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                cookie = resp.cookies.get(".ROBLOSECURITY")
-                return {"success": True, "username": username, "password": password, "userId": data.get("userId"), "cookie": str(cookie) if cookie else None}
-
             data = await resp.json()
+
+            if resp.status == 200:
+                cookie = resp.cookies.get(".ROBLOSECURITY")
+                return {
+                    "success": True,
+                    "username": username,
+                    "password": password,
+                    "userId": data.get("userId"),
+                    "cookie": str(cookie) if cookie else None
+                }
+
             errors = data.get("errors", [])
-
-            if any(e.get("code") == 2 for e in errors):
-                print("[*] Captcha required, solving...")
-                captcha = await solve_captcha()
-                if not captcha.get("success"):
-                    return {"success": False, "error": f"Captcha failed: {captcha.get('error')}"}
-
-                print("[+] Captcha solved!")
-                payload["captchaToken"] = captcha.get("token")
-                payload["captchaProvider"] = "PROVIDER_ARKOSE_LABS"
-
-                csrf = await get_csrf_token(session)
-                if csrf:
-                    session.headers.update({"x-csrf-token": csrf})
-
-                async with session.post(ROBLOX_SIGNUP_URL, json=payload) as retry:
-                    if retry.status == 200:
-                        data = await retry.json()
-                        cookie = retry.cookies.get(".ROBLOSECURITY")
-                        return {"success": True, "username": username, "password": password, "userId": data.get("userId"), "cookie": str(cookie) if cookie else None}
-                    else:
-                        data = await retry.json()
-                        err = data.get("errors", [{}])[0].get("message", "Unknown error")
-                        return {"success": False, "error": err}
-
-            err = errors[0].get("message", "Unknown error") if errors else "Unknown error"
+            err = errors[0].get("message", "Unknown error") if errors else str(data)
             return {"success": False, "error": err}
 
 
@@ -195,15 +201,23 @@ async def main():
     print("Roblox Account Generator")
     print("=" * 50)
 
+    if not PROXY:
+        print("\n[!] ERROR: You need to set a proxy!")
+        print("[!] Edit signup.py and set PROXY variable")
+        print("[!] Format: http://user:pass@ip:port")
+        return
+
+    print(f"[*] Using proxy: {PROXY[:30]}...")
+
     try:
-        count = int(input("How many accounts? "))
+        count = int(input("\nHow many accounts? "))
     except ValueError:
         count = 1
 
     success_count = 0
     for i in range(count):
         print(f"\n[{i+1}/{count}] Creating account...")
-        result = await signup()
+        result = await signup(PROXY)
 
         if result.get("success"):
             combo = f"{result['username']}:{result['password']}"
