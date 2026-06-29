@@ -359,11 +359,14 @@ async def signup() -> dict:
             permanent = any(w in last_err.lower() for w in ["username", "password", "exist", "taken", "invalid"])
             if permanent:
                 return result
-            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} failed ({last_err}), retrying...")
+            tail = ", retrying..." if attempt + 1 < MAX_ATTEMPTS else ""
+            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} failed ({last_err}){tail}")
         except Exception as e:
             last_err = str(e) or repr(e)
-            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} error ({last_err}), retrying...")
-        await asyncio.sleep(0.5)
+            tail = ", retrying..." if attempt + 1 < MAX_ATTEMPTS else ""
+            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} error ({last_err}){tail}")
+        if attempt + 1 < MAX_ATTEMPTS:
+            await asyncio.sleep(0.5)
     return {"success": False, "error": last_err}
 
 
