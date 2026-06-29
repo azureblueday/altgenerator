@@ -31,10 +31,11 @@ USE_BLOB = True
 # to False to experiment if you keep getting ERROR_SOLVE_FAILED: pow.
 ENABLE_POW = True
 
-# How many times to retry a single account when the solve fails.
-# FunBypass intermittently returns ERROR_MAKE_REQUEST / pow and auto-refunds
-# failed tasks, so cranking this up is basically free until a solve lands.
-MAX_ATTEMPTS = 25
+# Attempts per account. 1 = no retries (failed account is just dropped).
+MAX_ATTEMPTS = 1
+
+# How many accounts to process concurrently (threads on the solver).
+THREADS = 10
 
 # Proxies: socks5://user:pass@host:port  (rotated per account)
 # Legion proxy template. {SID} is replaced with a fresh random session ID
@@ -392,25 +393,34 @@ async def main():
     except Exception:
         count = 1
 
-    success = 0
-    for i in range(count):
-        print(f"\n[{i+1}/{count}] Creating account...")
-        result = await signup()
+    print(f"[*] Running {THREADS} concurrent, no retries\n")
 
-        if result.get("success"):
-            combo = f"{result['username']}:{result['password']}"
-            print(f"[+] SUCCESS: {combo}")
-            with open(OUTPUT_FILE, "a") as f:
-                f.write(combo + "\n")
-            success += 1
-        else:
-            print(f"[-] FAILED: {result.get('error')}")
+    sem = asyncio.Semaphore(THREADS)
+    write_lock = asyncio.Lock()
+    stats = {"success": 0, "fail": 0}
 
-        if i < count - 1:
-            await asyncio.sleep(2)
+    async def worker(idx: int):
+        async with sem:
+            try:
+                result = await signup()
+            except Exception as e:
+                result = {"success": False, "error": str(e)}
+
+            if result.get("success"):
+                combo = f"{result['username']}:{result['password']}"
+                async with write_lock:
+                    with open(OUTPUT_FILE, "a") as f:
+                        f.write(combo + "\n")
+                    stats["success"] += 1
+                print(f"[+] [{idx}] SUCCESS: {combo}")
+            else:
+                stats["fail"] += 1
+                print(f"[-] [{idx}] FAILED: {result.get('error')}")
+
+    await asyncio.gather(*(worker(i + 1) for i in range(count)))
 
     print(f"\n{'=' * 50}")
-    print(f"Done! {success}/{count} created")
+    print(f"Done! {stats['success']}/{count} created")
     print(f"Saved: {OUTPUT_FILE}")
 
 
