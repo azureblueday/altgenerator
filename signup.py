@@ -17,6 +17,10 @@ ROBLOX_SIGNUP_KEY = "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F"
 
 OUTPUT_FILE = "accounts.txt"
 
+# Pass Roblox's per-session blob to the solver (True) or let FunBypass
+# handle the whole session generically (False). Flip this to compare.
+USE_BLOB = True
+
 # Proxies: socks5://user:pass@host:port  (rotated per account)
 PROXIES = [
     "socks5://uorder40767_session-vwyxja4eh0_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
@@ -224,11 +228,12 @@ async def signup_once(proxy: str) -> dict:
         except Exception as e:
             return {"success": False, "error": f"Bad challenge metadata: {e}"}
 
-        if not blob:
+        if USE_BLOB and not blob:
             return {"success": False, "error": "No blob in challenge metadata"}
 
-        # 5. Solve FunCaptcha with the Roblox blob
-        print("  [*] Solving captcha with blob...")
+        # 5. Solve FunCaptcha (optionally with the Roblox blob)
+        data_arg = json.dumps({"blob": blob}) if (USE_BLOB and blob) else None
+        print(f"  [*] Solving captcha (blob={'yes' if data_arg else 'no'})...")
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=200)) as fb_session:
             token = await fb.solve(
                 fb_session,
@@ -236,7 +241,7 @@ async def signup_once(proxy: str) -> dict:
                 website_public_key=ROBLOX_SIGNUP_KEY,
                 website_subdomain="roblox-api",
                 proxy=proxy,
-                data=json.dumps({"blob": blob}),
+                data=data_arg,
             )
         print("  [+] Captcha solved!")
 
