@@ -187,10 +187,17 @@ async def signup(proxy: str) -> dict:
         password = generate_password()
         birthday = generate_birthday()
 
-        # Solve captcha FIRST
-        captcha = await solve_captcha(proxy)
-        if not captcha.get("success"):
-            return {"success": False, "error": f"Captcha: {captcha.get('error')}"}
+        # Solve captcha FIRST - retry with fresh proxies on failure
+        captcha = None
+        for attempt in range(4):
+            p = random.choice(PROXIES)
+            captcha = await solve_captcha(p)
+            if captcha.get("success"):
+                break
+            print(f"[*] Captcha attempt {attempt+1}/4 failed, rotating proxy...")
+            await asyncio.sleep(1)
+        if not captcha or not captcha.get("success"):
+            return {"success": False, "error": f"Captcha: {captcha.get('error') if captcha else 'failed'}"}
 
         # Get CSRF
         csrf = await get_csrf(session)
