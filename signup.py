@@ -124,11 +124,24 @@ class FunBypass:
         if data:
             task["data"] = data
 
-        async with session.post(f"{self.BASE_URL}/createTask", json={"clientKey": self.client_key, "task": task}) as resp:
-            result = await resp.json(content_type=None)
+        # Retry through transient gateway flakiness (502/503/empty body)
+        for attempt in range(5):
+            async with session.post(f"{self.BASE_URL}/createTask", json={"clientKey": self.client_key, "task": task}) as resp:
+                body = await resp.text()
+            if resp.status in (502, 503, 504) or not body.strip():
+                print(f"    [funbypass] gateway {resp.status}, retrying createTask ({attempt+1}/5)...")
+                await asyncio.sleep(2 * (attempt + 1))
+                continue
+            try:
+                result = json.loads(body)
+            except Exception:
+                print(f"    [funbypass] non-JSON createTask: {body[:100]!r}, retrying...")
+                await asyncio.sleep(2 * (attempt + 1))
+                continue
             if result.get("errorId", 1) != 0:
                 raise Exception(f"{result.get('errorCode')}: {result.get('errorDescription')}")
             return result["taskId"]
+        raise Exception("createTask failed: FunBypass gateway unavailable (502)")
 
     async def get_task_result(self, session, task_id, interval=1.0, timeout=180) -> str:
         elapsed = 0
