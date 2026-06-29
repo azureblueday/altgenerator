@@ -145,16 +145,20 @@ class FunBypass:
 
     async def get_task_result(self, session, task_id, interval=1.0, timeout=180) -> str:
         elapsed = 0
+        bad_streak = 0
         while elapsed < timeout:
             async with session.get(f"{self.BASE_URL}/getTaskResult/{task_id}") as resp:
                 try:
                     result = await resp.json(content_type=None)
                 except Exception:
-                    body = await resp.text()
-                    print(f"    [funbypass] non-JSON ({resp.status}): {body[:120]}")
+                    bad_streak += 1
+                    if bad_streak >= 6:
+                        raise Exception(f"FunBypass gateway down ({resp.status}) polling result")
+                    print(f"    [funbypass] gateway {resp.status}, retry poll ({bad_streak}/6)...")
                     await asyncio.sleep(interval)
                     elapsed += interval
                     continue
+            bad_streak = 0
 
             status = result.get("status")
             if int(elapsed) % 5 == 0:
@@ -219,10 +223,13 @@ async def check_username(session: aiohttp.ClientSession, username: str, birthday
 
 
 async def signup_once() -> dict:
-    proxy_local = mint_proxy()   # for our Roblox connection
-    proxy_fb = mint_proxy()      # separate session for FunBypass solve
+    # SAME proxy (same sticky IP) for both the Roblox connection and the
+    # FunBypass solve. Arkose binds the token to the solving IP, so the
+    # signup must be submitted from that same IP or it's "Token Validation Failed".
+    proxy = mint_proxy()
+    proxy_fb = proxy
     timeout = aiohttp.ClientTimeout(total=60)
-    connector = make_connector(proxy_local) if HAS_SOCKS else None
+    connector = make_connector(proxy) if HAS_SOCKS else None
     async with aiohttp.ClientSession(headers=ROBLOX_HEADERS, timeout=timeout, connector=connector) as session:
         # 1. Find an available username
         print("  [*] Finding username...")
