@@ -4,12 +4,14 @@
 # Bot Token - Get this from Discord Developer Portal
 BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 
-# Role Configuration
-# Change this to match your server's premium role name (case-sensitive!)
-PREMIUM_ROLE_NAME = "Premium"
+# API Keys
+BLOXGEN_API_KEY = "BLOX-XXXXXXXXXXXXXXXX"  # Bloxgen API key for pre-made accounts
+FUNBYPASS_API_KEY = "FUN-UX2841S4ZI281AVK"  # Funbypass API key for captcha solving
 
-# Role required to use /restock command (case-sensitive!)
-RESTOCK_ROLE_NAME = "Restock"
+# Role Configuration
+PREMIUM_ROLE_NAME = "Premium"  # Premium role for better limits
+ADMIN_ROLE_NAME = "Admin"  # Admin role for /balance command
+RESTOCK_ROLE_NAME = "Restock"  # Role required for /restock command
 
 # Cooldown Settings (in seconds)
 PREMIUM_COOLDOWN = 30      # Premium users wait 30 seconds
@@ -19,7 +21,7 @@ NORMAL_COOLDOWN = 3600     # Normal users wait 60 minutes (3600 seconds)
 PREMIUM_DAILY_LIMIT = 50   # Premium users: 50 accounts per day
 NORMAL_DAILY_LIMIT = 10    # Normal users: 10 accounts per day
 
-# Bot Command Prefix (for text commands like !format)
+# Bot Command Prefix (for text commands)
 COMMAND_PREFIX = "!"
 
 # Feature Toggles
