@@ -64,9 +64,9 @@ async def solve_captcha(proxy: str) -> dict:
     async with aiohttp.ClientSession() as session:
         task = {
             "type": "FunCaptchaTask",
-            "websiteURL": "https://www.roblox.com/login",
+            "websiteURL": "https://www.roblox.com/account/signupredir",
             "websitePublicKey": ROBLOX_CAPTCHA_KEY,
-            "websiteSubdomain": "roblox-api",
+            "websiteSubdomain": "client-api",
             "proxy": proxy,
             "enablePOW": True,
         }
