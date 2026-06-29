@@ -23,11 +23,11 @@ USE_BLOB = True
 
 # Proxies: socks5://user:pass@host:port  (rotated per account)
 PROXIES = [
-    "socks5://uorder40767_pool-udp_country-US_session-ushu47nvol_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_session-xdcp9ftd4j_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_session-qr1b7dtnum_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_session-qdpseqiwiz_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_session-2y17t0rrov_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-jzctm6154b_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-veudj8l3ap_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-6kys2vifd5_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-0gmmanexcp_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_fastmode-true_country-US_city-los angeles_session-0qv1hwdbrh_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
 ]
 
 # ─────────────────────────────────────────────────────────────
@@ -220,11 +220,13 @@ async def signup_once(proxy: str) -> dict:
                     err = text[:160]
                 return {"success": False, "error": err}
 
-        # 4. Decode challenge metadata -> blob + unifiedCaptchaId
+        # 4. Decode challenge metadata -> blob + unifiedCaptchaId + actionType
         try:
             meta = json.loads(base64.b64decode(challenge_metadata_b64))
+            print(f"  [debug] challenge meta: {meta}")
             blob = meta.get("dataExchangeBlob") or meta.get("blob")
             unified_captcha_id = meta.get("unifiedCaptchaId")
+            action_type = meta.get("actionType") or "Generic"
         except Exception as e:
             return {"success": False, "error": f"Bad challenge metadata: {e}"}
 
@@ -245,29 +247,28 @@ async def signup_once(proxy: str) -> dict:
             )
         print("  [+] Captcha solved!")
 
-        # 6. Continue the challenge with the solved token
-        continue_meta = base64.b64encode(json.dumps({
+        # 6. Continue the challenge with the solved token (reuse actionType from Roblox)
+        solved_meta = json.dumps({
             "unifiedCaptchaId": unified_captcha_id,
             "captchaToken": token,
-            "actionType": "Signup",
-        }).encode()).decode()
+            "actionType": action_type,
+        })
+        continue_meta_b64 = base64.b64encode(solved_meta.encode()).decode()
 
-        await session.post("https://apis.roblox.com/challenge/v1/continue", json={
+        async with session.post("https://apis.roblox.com/challenge/v1/continue", json={
             "challengeId": challenge_id,
             "challengeType": "captcha",
-            "challengeMetadata": json.dumps({
-                "unifiedCaptchaId": unified_captcha_id,
-                "captchaToken": token,
-                "actionType": "Signup",
-            }),
-        })
+            "challengeMetadata": solved_meta,
+        }) as cont_resp:
+            cont_text = await cont_resp.text()
+            print(f"  [debug] continue ({cont_resp.status}): {cont_text[:160]}")
 
         # 7. Re-submit signup with challenge headers
         csrf = await get_csrf(session)
         session.headers["x-csrf-token"] = csrf
         session.headers["rblx-challenge-id"] = challenge_id
         session.headers["rblx-challenge-type"] = "captcha"
-        session.headers["rblx-challenge-metadata"] = continue_meta
+        session.headers["rblx-challenge-metadata"] = continue_meta_b64
 
         print("  [*] Finalizing signup...")
         async with session.post("https://auth.roblox.com/v2/signup", json=payload) as resp:
