@@ -66,8 +66,10 @@ class FunBypass:
 
     async def get_balance(self, session: aiohttp.ClientSession) -> float:
         async with session.post(f"{self.BASE_URL}/getBalance", json={"clientKey": self.client_key}) as resp:
-            data = await resp.json()
-            if data["errorId"] != 0:
+            if resp.status != 200:
+                raise Exception(f"API gateway returned {resp.status} (FunBypass server flaky)")
+            data = await resp.json(content_type=None)
+            if data.get("errorId", 1) != 0:
                 raise Exception(f"{data.get('errorCode')}: {data.get('errorDescription')}")
             return data["balance"]
 
