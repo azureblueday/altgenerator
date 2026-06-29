@@ -1,19 +1,23 @@
-import aiohttp
 import asyncio
+import aiohttp
 import random
 import string
-import time
+import base64
 import json
+import time
 from datetime import datetime
 
+# ─────────────────────────────────────────────────────────────
+# CONFIG
+# ─────────────────────────────────────────────────────────────
 FUNBYPASS_API_KEY = "FUN-7HDZBUU7UJPO2OB9"
-FUNBYPASS_BASE_URL = "https://api.funbypass.com"
-ROBLOX_SIGNUP_URL = "https://auth.roblox.com/v2/signup"
-ROBLOX_USERNAME_CHECK_URL = "https://auth.roblox.com/v1/usernames/validate"
-ROBLOX_CAPTCHA_KEY = "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F"
+
+# Roblox — Signup site key (from FunBypass supported sites)
+ROBLOX_SIGNUP_KEY = "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F"
+
 OUTPUT_FILE = "accounts.txt"
 
-# Proxies in format socks5://user:pass@host:port - rotated per account
+# Proxies: socks5://user:pass@host:port  (rotated per account)
 PROXIES = [
     "socks5://uorder40767_session-vwyxja4eh0_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
     "socks5://uorder40767_session-he6r25e152_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
@@ -22,14 +26,9 @@ PROXIES = [
     "socks5://uorder40767_session-yqg3jbhi4c_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
 ]
 
-# Headers to avoid being blocked by the API gateway/CDN
-FB_HEADERS = {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Accept-Language": "en-US,en;q=0.9",
-}
-
+# ─────────────────────────────────────────────────────────────
+# WORD LISTS (human-like usernames)
+# ─────────────────────────────────────────────────────────────
 ADJECTIVES = ["Cool", "Epic", "Swift", "Dark", "Bright", "Silent", "Wild", "Lucky", "Brave", "Mighty", "Crazy", "Happy", "Royal", "Golden", "Silver", "Shadow", "Storm", "Fire", "Ice", "Thunder"]
 NOUNS = ["Wolf", "Dragon", "Phoenix", "Tiger", "Eagle", "Lion", "Shark", "Bear", "Hawk", "Cobra", "Panther", "Fox", "Raven", "Falcon", "Jaguar", "Blade", "Knight", "Warrior", "Hunter", "Ranger"]
 NAMES = ["Alex", "Max", "Jake", "Ryan", "Kyle", "Mike", "Nick", "Sam", "Chris", "Matt", "Luke", "Zack", "Cole", "Drew", "Josh", "Evan", "Adam", "Eric", "Mark", "Leo"]
@@ -56,187 +55,234 @@ def generate_birthday() -> str:
     return f"{year}-{random.randint(1,12):02d}-{random.randint(1,28):02d}T00:00:00.000Z"
 
 
-async def check_username(session: aiohttp.ClientSession, username: str) -> bool:
-    try:
-        async with session.get(ROBLOX_USERNAME_CHECK_URL, params={"username": username, "birthday": generate_birthday(), "context": "Signup"}) as resp:
+# ─────────────────────────────────────────────────────────────
+# FUNBYPASS CLIENT (based on official async example)
+# ─────────────────────────────────────────────────────────────
+class FunBypass:
+    BASE_URL = "https://api.funbypass.com"
+
+    def __init__(self, client_key: str):
+        self.client_key = client_key
+
+    async def get_balance(self, session: aiohttp.ClientSession) -> float:
+        async with session.post(f"{self.BASE_URL}/getBalance", json={"clientKey": self.client_key}) as resp:
             data = await resp.json()
-            return data.get("code") == 0
-    except:
-        return False
+            if data["errorId"] != 0:
+                raise Exception(f"{data.get('errorCode')}: {data.get('errorDescription')}")
+            return data["balance"]
+
+    async def create_task(self, session, website_url, website_public_key, website_subdomain, proxy, data=None) -> str:
+        task = {
+            "type": "FunCaptchaTask",
+            "websiteURL": website_url,
+            "websitePublicKey": website_public_key,
+            "websiteSubdomain": website_subdomain,
+            "proxy": proxy,
+            "enablePOW": True,
+        }
+        if data:
+            task["data"] = data
+
+        async with session.post(f"{self.BASE_URL}/createTask", json={"clientKey": self.client_key, "task": task}) as resp:
+            result = await resp.json()
+            if result["errorId"] != 0:
+                raise Exception(f"{result.get('errorCode')}: {result.get('errorDescription')}")
+            return result["taskId"]
+
+    async def get_task_result(self, session, task_id, interval=1.0, timeout=180) -> str:
+        elapsed = 0
+        while elapsed < timeout:
+            async with session.get(f"{self.BASE_URL}/getTaskResult/{task_id}") as resp:
+                result = await resp.json()
+
+            status = result.get("status")
+            if int(elapsed) % 5 == 0:
+                print(f"    [funbypass] status={status} ({int(elapsed)}s)")
+
+            if status == "ready":
+                if result["errorId"] == 0:
+                    return result["solution"]["token"]
+                raise Exception(f"{result.get('errorCode')}: {result.get('errorDescription')}")
+            if status == "failure":
+                raise Exception(f"{result.get('errorCode')}: {result.get('errorDescription')}")
+
+            await asyncio.sleep(interval)
+            elapsed += interval
+
+        raise TimeoutError(f"Task {task_id} timed out")
+
+    async def solve(self, session, website_url, website_public_key, website_subdomain, proxy, data=None) -> str:
+        task_id = await self.create_task(session, website_url, website_public_key, website_subdomain, proxy, data)
+        print(f"    [funbypass] task created: {task_id}")
+        return await self.get_task_result(session, task_id)
+
+
+fb = FunBypass(FUNBYPASS_API_KEY)
+
+
+# ─────────────────────────────────────────────────────────────
+# ROBLOX SIGNUP
+# ─────────────────────────────────────────────────────────────
+ROBLOX_HEADERS = {
+    "Content-Type": "application/json;charset=UTF-8",
+    "Accept": "application/json, text/plain, */*",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Origin": "https://www.roblox.com",
+    "Referer": "https://www.roblox.com/",
+    "sec-ch-ua": '"Chromium";v="122", "Not(A:Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+}
 
 
 async def get_csrf(session: aiohttp.ClientSession) -> str:
+    async with session.post("https://auth.roblox.com/v2/signup", json={}) as resp:
+        return resp.headers.get("x-csrf-token", "")
+
+
+async def check_username(session: aiohttp.ClientSession, username: str, birthday: str) -> bool:
+    url = "https://auth.roblox.com/v1/usernames/validate"
+    params = {"username": username, "birthday": birthday, "context": "Signup"}
     try:
-        async with session.post("https://auth.roblox.com/v2/login", json={}) as resp:
-            return resp.headers.get("x-csrf-token", "")
-    except:
-        return ""
+        async with session.get(url, params=params) as resp:
+            data = await resp.json()
+            return data.get("code") == 0
+    except Exception:
+        return False
 
 
-async def check_balance() -> dict:
-    async with aiohttp.ClientSession(headers=FB_HEADERS) as session:
-        for attempt in range(3):
-            try:
-                async with session.post(f"{FUNBYPASS_BASE_URL}/getBalance", json={"clientKey": FUNBYPASS_API_KEY}) as resp:
-                    if resp.status != 200:
-                        body = await resp.text()
-                        print(f"[*] Retry {attempt+1}/3 (status {resp.status}): {body[:120]}")
-                        await asyncio.sleep(2)
-                        continue
-                    result = await resp.json()
-                    if result.get("errorId") == 0:
-                        return {"success": True, "balance": result.get("balance")}
-                    return {"success": False, "error": result.get("errorCode")}
-            except Exception as e:
-                print(f"[*] Retry {attempt+1}/3 ({e})...")
-                await asyncio.sleep(2)
-        return {"success": False, "error": "API unavailable after 3 retries"}
-
-
-async def solve_captcha(proxy: str) -> dict:
-    print("[*] Solving captcha (this may take 30-60 seconds)...")
-
-    async with aiohttp.ClientSession(headers=FB_HEADERS) as session:
-        task = {
-            "type": "FunCaptchaTask",
-            "websiteURL": "https://www.roblox.com",
-            "websitePublicKey": ROBLOX_CAPTCHA_KEY,
-            "websiteSubdomain": "roblox-api",
-            "proxy": proxy,
-        }
-
-        task_id = None
-        for attempt in range(3):
-            try:
-                async with session.post(f"{FUNBYPASS_BASE_URL}/createTask", json={"clientKey": FUNBYPASS_API_KEY, "task": task}) as resp:
-                    if resp.status != 200:
-                        print(f"[*] Retry {attempt+1}/3 (status {resp.status})...")
-                        await asyncio.sleep(2)
-                        continue
-                    result = await resp.json()
-                    if result.get("errorId") != 0:
-                        return {"success": False, "error": result.get("errorCode", result.get("errorDescription", "Task failed"))}
-                    task_id = result.get("taskId")
-                    print(f"[*] Task: {task_id}")
-                    break
-            except Exception as e:
-                print(f"[*] Retry {attempt+1}/3 ({e})...")
-                await asyncio.sleep(2)
-
-        if not task_id:
-            return {"success": False, "error": "Failed to create task after 3 retries"}
-
-        start = time.time()
-        while time.time() - start < 180:
-            await asyncio.sleep(1)
-            async with session.get(f"{FUNBYPASS_BASE_URL}/getTaskResult/{task_id}") as resp:
-                if resp.status != 200 and resp.status != 202:
-                    print(f"[*] API returned {resp.status}, retrying...")
-                    continue
-                try:
-                    result = await resp.json()
-                except:
-                    print(f"[*] Invalid JSON, retrying...")
-                    continue
-                status = result.get("status")
-
-                elapsed = int(time.time() - start)
-                if elapsed % 5 == 0:
-                    print(f"[*] Status: {status} ({elapsed}s)")
-
-                if status == "ready":
-                    if result.get("errorId") == 0:
-                        token = result.get("solution", {}).get("token")
-                        print(f"[+] Solved!")
-                        return {"success": True, "token": token}
-                    err = f"{result.get('errorCode')}: {result.get('errorDescription')}"
-                    print(f"[-] Error: {err}")
-                    return {"success": False, "error": err}
-                elif status == "failure":
-                    err = f"{result.get('errorCode')}: {result.get('errorDescription')}"
-                    print(f"[-] Failed: {err}")
-                    print(f"[-] Full response: {result}")
-                    return {"success": False, "error": err}
-
-        return {"success": False, "error": "Timeout"}
-
-
-async def signup(proxy: str) -> dict:
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Origin": "https://www.roblox.com",
-        "Referer": "https://www.roblox.com/",
-    }
-
-    async with aiohttp.ClientSession(headers=headers) as session:
-        # Find username
-        print("[*] Finding username...")
+async def signup_once(proxy: str) -> dict:
+    timeout = aiohttp.ClientTimeout(total=60)
+    async with aiohttp.ClientSession(headers=ROBLOX_HEADERS, timeout=timeout) as session:
+        # 1. Find an available username
+        print("  [*] Finding username...")
         username = None
+        birthday = generate_birthday()
         for _ in range(15):
-            candidate = generate_username()
-            if await check_username(session, candidate):
-                username = candidate
-                print(f"[+] Found: {username}")
+            cand = generate_username()
+            if await check_username(session, cand, birthday):
+                username = cand
                 break
-
         if not username:
             return {"success": False, "error": "No available username"}
+        print(f"  [+] Username: {username}")
 
         password = generate_password()
-        birthday = generate_birthday()
 
-        # Solve captcha FIRST - retry with fresh proxies on failure
-        captcha = None
-        for attempt in range(4):
-            p = random.choice(PROXIES)
-            captcha = await solve_captcha(p)
-            if captcha.get("success"):
-                break
-            print(f"[*] Captcha attempt {attempt+1}/4 failed, rotating proxy...")
-            await asyncio.sleep(1)
-        if not captcha or not captcha.get("success"):
-            return {"success": False, "error": f"Captcha: {captcha.get('error') if captcha else 'failed'}"}
-
-        # Get CSRF
+        # 2. CSRF token
         csrf = await get_csrf(session)
-        if csrf:
-            session.headers.update({"x-csrf-token": csrf})
+        session.headers["x-csrf-token"] = csrf
 
-        # Signup with captcha token
         payload = {
             "username": username,
             "password": password,
             "birthday": birthday,
-            "gender": 2,
             "isTosAgreementBoxChecked": True,
-            "agreementIds": ["54d8a8f0-d9c8-4cf3-9b6f-5a8e2f9a7a7a"],
-            "captchaId": ROBLOX_CAPTCHA_KEY,
-            "captchaToken": captcha.get("token"),
-            "captchaProvider": "PROVIDER_ARKOSE_LABS",
+            "agreementIds": [],
+            "gender": random.randint(1, 2),
         }
 
-        print("[*] Signing up...")
-        async with session.post(ROBLOX_SIGNUP_URL, json=payload) as resp:
+        # 3. First signup attempt -> expect a challenge (403)
+        print("  [*] Requesting challenge...")
+        async with session.post("https://auth.roblox.com/v2/signup", json=payload) as resp:
             text = await resp.text()
-            print(f"[*] Response ({resp.status}): {text[:200]}")
-
             if resp.status == 200:
                 data = json.loads(text)
-                cookie = None
-                for c in resp.cookies.values():
-                    if c.key == ".ROBLOSECURITY":
-                        cookie = c.value
+                cookie = next((c.value for c in resp.cookies.values() if c.key == ".ROBLOSECURITY"), None)
                 return {"success": True, "username": username, "password": password, "userId": data.get("userId"), "cookie": cookie}
 
-            # Try to parse error
-            try:
+            challenge_id = resp.headers.get("rblx-challenge-id")
+            challenge_metadata_b64 = resp.headers.get("rblx-challenge-metadata")
+
+            if not challenge_id or not challenge_metadata_b64:
+                try:
+                    err = json.loads(text)["errors"][0]["message"]
+                except Exception:
+                    err = text[:160]
+                return {"success": False, "error": err}
+
+        # 4. Decode challenge metadata -> blob + unifiedCaptchaId
+        try:
+            meta = json.loads(base64.b64decode(challenge_metadata_b64))
+            blob = meta.get("dataExchangeBlob") or meta.get("blob")
+            unified_captcha_id = meta.get("unifiedCaptchaId")
+        except Exception as e:
+            return {"success": False, "error": f"Bad challenge metadata: {e}"}
+
+        if not blob:
+            return {"success": False, "error": "No blob in challenge metadata"}
+
+        # 5. Solve FunCaptcha with the Roblox blob
+        print("  [*] Solving captcha with blob...")
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=200)) as fb_session:
+            token = await fb.solve(
+                fb_session,
+                website_url="https://www.roblox.com/account/signupredir",
+                website_public_key=ROBLOX_SIGNUP_KEY,
+                website_subdomain="roblox-api",
+                proxy=proxy,
+                data=json.dumps({"blob": blob}),
+            )
+        print("  [+] Captcha solved!")
+
+        # 6. Continue the challenge with the solved token
+        continue_meta = base64.b64encode(json.dumps({
+            "unifiedCaptchaId": unified_captcha_id,
+            "captchaToken": token,
+            "actionType": "Signup",
+        }).encode()).decode()
+
+        await session.post("https://apis.roblox.com/challenge/v1/continue", json={
+            "challengeId": challenge_id,
+            "challengeType": "captcha",
+            "challengeMetadata": json.dumps({
+                "unifiedCaptchaId": unified_captcha_id,
+                "captchaToken": token,
+                "actionType": "Signup",
+            }),
+        })
+
+        # 7. Re-submit signup with challenge headers
+        csrf = await get_csrf(session)
+        session.headers["x-csrf-token"] = csrf
+        session.headers["rblx-challenge-id"] = challenge_id
+        session.headers["rblx-challenge-type"] = "captcha"
+        session.headers["rblx-challenge-metadata"] = continue_meta
+
+        print("  [*] Finalizing signup...")
+        async with session.post("https://auth.roblox.com/v2/signup", json=payload) as resp:
+            text = await resp.text()
+            if resp.status == 200:
                 data = json.loads(text)
-                err = data.get("errors", [{}])[0].get("message", text)
-            except:
-                err = text
+                cookie = next((c.value for c in resp.cookies.values() if c.key == ".ROBLOSECURITY"), None)
+                return {"success": True, "username": username, "password": password, "userId": data.get("userId"), "cookie": cookie}
+
+            try:
+                err = json.loads(text)["errors"][0]["message"]
+            except Exception:
+                err = text[:160]
             return {"success": False, "error": err}
+
+
+async def signup(proxy_pool) -> dict:
+    """Try signup, rotating proxies if the captcha solve fails."""
+    last_err = "unknown"
+    for attempt in range(4):
+        proxy = random.choice(proxy_pool)
+        try:
+            result = await signup_once(proxy)
+            if result.get("success"):
+                return result
+            last_err = result.get("error", "unknown")
+            # If it's a username/non-captcha error, no point rotating proxy
+            if "captcha" not in last_err.lower() and "blob" not in last_err.lower() and "challenge" not in last_err.lower():
+                return result
+            print(f"  [*] Attempt {attempt+1}/4 failed ({last_err}), rotating proxy...")
+        except Exception as e:
+            last_err = str(e)
+            print(f"  [*] Attempt {attempt+1}/4 error ({last_err}), rotating proxy...")
+        await asyncio.sleep(1)
+    return {"success": False, "error": last_err}
 
 
 async def main():
@@ -245,24 +291,23 @@ async def main():
     print("=" * 50)
     print(f"Loaded {len(PROXIES)} proxies")
 
-    # Check balance first
-    print("[*] Checking Funbypass balance...")
-    bal = await check_balance()
-    if bal.get("success"):
-        print(f"[+] Balance: ${bal.get('balance')}")
-    else:
-        print(f"[!] Balance check failed: {bal.get('error')} - continuing anyway...")
+    # Balance check
+    try:
+        async with aiohttp.ClientSession() as s:
+            bal = await fb.get_balance(s)
+            print(f"[+] FunBypass balance: ${bal}")
+    except Exception as e:
+        print(f"[!] Balance check failed: {e} (continuing)")
 
     try:
         count = int(input("\nHow many accounts? "))
-    except:
+    except Exception:
         count = 1
 
     success = 0
     for i in range(count):
         print(f"\n[{i+1}/{count}] Creating account...")
-        proxy = random.choice(PROXIES)
-        result = await signup(proxy)
+        result = await signup(PROXIES)
 
         if result.get("success"):
             combo = f"{result['username']}:{result['password']}"
@@ -274,9 +319,10 @@ async def main():
             print(f"[-] FAILED: {result.get('error')}")
 
         if i < count - 1:
-            await asyncio.sleep(3)
+            await asyncio.sleep(2)
 
-    print(f"\nDone! {success}/{count} created")
+    print(f"\n{'=' * 50}")
+    print(f"Done! {success}/{count} created")
     print(f"Saved: {OUTPUT_FILE}")
 
 
