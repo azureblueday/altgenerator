@@ -18,21 +18,17 @@ PROXY = "http://1I2zNUuGf_lightning_proxy-country-any:0azv9rghjq@resident.lightn
 
 ADJECTIVES = [
     "Cool", "Epic", "Swift", "Dark", "Bright", "Silent", "Wild", "Lucky", "Brave", "Mighty",
-    "Crazy", "Happy", "Sneaky", "Royal", "Golden", "Silver", "Crystal", "Shadow", "Storm", "Fire",
-    "Ice", "Thunder", "Mystic", "Cosmic", "Turbo", "Ultra", "Mega", "Super", "Hyper", "Pro",
-    "Elite", "Prime", "Alpha", "Omega", "Nova", "Neon", "Pixel", "Cyber", "Ninja", "Phantom"
+    "Crazy", "Happy", "Sneaky", "Royal", "Golden", "Silver", "Crystal", "Shadow", "Storm", "Fire"
 ]
 
 NOUNS = [
     "Wolf", "Dragon", "Phoenix", "Tiger", "Eagle", "Lion", "Shark", "Bear", "Hawk", "Cobra",
-    "Panther", "Viper", "Fox", "Raven", "Falcon", "Jaguar", "Lynx", "Puma", "Raptor", "Scorpion",
-    "Blade", "Storm", "Knight", "Warrior", "Hunter", "Ranger", "Sniper", "Raider", "Slayer", "Master"
+    "Panther", "Viper", "Fox", "Raven", "Falcon", "Jaguar", "Lynx", "Puma", "Raptor", "Storm"
 ]
 
 NAMES = [
     "Alex", "Max", "Jake", "Ryan", "Kyle", "Mike", "Nick", "Sam", "Chris", "Matt",
-    "Luke", "Zack", "Cole", "Drew", "Seth", "Josh", "Evan", "Adam", "Eric", "Mark",
-    "Lily", "Emma", "Mia", "Zoe", "Luna", "Aria", "Nova", "Ivy", "Ruby", "Sky"
+    "Luke", "Zack", "Cole", "Drew", "Seth", "Josh", "Evan", "Adam", "Eric", "Mark"
 ]
 
 
@@ -41,15 +37,13 @@ def generate_username() -> str:
     if style == 1:
         return f"{random.choice(ADJECTIVES)}{random.choice(NOUNS)}{random.randint(1, 999)}"
     elif style == 2:
-        num = random.randint(0, 99)
-        base = f"{random.choice(NAMES)}{random.choice(NOUNS)}"
-        return f"{base}{num}" if num > 0 else base
+        return f"{random.choice(NAMES)}{random.choice(NOUNS)}{random.randint(0, 99)}"
     elif style == 3:
-        return f"{random.choice(NAMES)}{random.choice(['_', 'x', 'X', ''])}{random.randint(100, 9999)}"
+        return f"{random.choice(NAMES)}{random.choice(['_', 'x', ''])}{random.randint(100, 9999)}"
     elif style == 4:
         return f"{random.choice(ADJECTIVES)}{random.choice(NAMES)}{random.randint(1, 99)}"
     else:
-        return f"{random.choice(NOUNS)}{random.choice(['_', '', 'x'])}{random.choice(NOUNS)}{random.randint(1, 99)}"
+        return f"{random.choice(NOUNS)}{random.choice(NOUNS)}{random.randint(1, 99)}"
 
 
 def generate_password() -> str:
@@ -81,7 +75,7 @@ async def get_csrf_token(session: aiohttp.ClientSession) -> str:
         return ""
 
 
-async def solve_captcha(proxy: str, data_blob: str = None) -> dict:
+async def solve_captcha(proxy: str, blob: str = None) -> dict:
     async with aiohttp.ClientSession() as session:
         task = {
             "type": "FunCaptchaTask",
@@ -91,30 +85,56 @@ async def solve_captcha(proxy: str, data_blob: str = None) -> dict:
             "proxy": proxy,
             "enablePOW": True,
         }
-        if data_blob:
-            task["data"] = json.dumps({"blob": data_blob})
+
+        if blob:
+            task["data"] = json.dumps({"blob": blob})
 
         payload = {"clientKey": FUNBYPASS_API_KEY, "task": task}
 
+        print(f"[*] Creating captcha task...")
         async with session.post(f"{FUNBYPASS_BASE_URL}/createTask", json=payload) as resp:
             result = await resp.json()
+            print(f"[*] Response: {result}")
             if result.get("errorId") != 0:
                 return {"success": False, "error": result.get("errorDescription", result.get("errorCode", "Failed"))}
             task_id = result.get("taskId")
             print(f"[*] Task ID: {task_id}")
 
-        for _ in range(300):
+        for i in range(300):
             await asyncio.sleep(0.5)
             async with session.get(f"{FUNBYPASS_BASE_URL}/getTaskResult/{task_id}") as resp:
                 result = await resp.json()
-                if result.get("status") == "ready":
+                status = result.get("status")
+                if i % 10 == 0:
+                    print(f"[*] Status: {status}")
+                if status == "ready":
                     if result.get("errorId") == 0:
                         return {"success": True, "token": result.get("solution", {}).get("token")}
                     return {"success": False, "error": result.get("errorDescription", "Failed")}
-                elif result.get("status") == "failure":
+                elif status == "failure":
                     return {"success": False, "error": result.get("errorDescription", result.get("errorCode", "Failed"))}
 
         return {"success": False, "error": "Timeout"}
+
+
+async def continue_challenge(session: aiohttp.ClientSession, challenge_id: str, captcha_token: str, unified_captcha_id: str) -> dict:
+    """Continue the challenge after solving captcha"""
+    url = "https://apis.roblox.com/challenge/v1/continue"
+
+    challenge_metadata = {
+        "unifiedCaptchaId": unified_captcha_id,
+        "captchaToken": captcha_token,
+        "actionType": "Signup"
+    }
+
+    payload = {
+        "challengeId": challenge_id,
+        "challengeType": "captcha",
+        "challengeMetadata": json.dumps(challenge_metadata)
+    }
+
+    async with session.post(url, json=payload) as resp:
+        return await resp.json()
 
 
 async def signup(proxy: str) -> dict:
@@ -135,7 +155,6 @@ async def signup(proxy: str) -> dict:
                 username = candidate
                 print(f"[+] Username available: {username}")
                 break
-            print(f"[-] Taken: {candidate}")
 
         if not username:
             return {"success": False, "error": "Could not find available username"}
@@ -156,65 +175,89 @@ async def signup(proxy: str) -> dict:
             "agreementIds": [],
         }
 
-        # First attempt - get challenge metadata
-        print("[*] Getting challenge...")
+        # First request to get challenge
+        print("[*] Initial signup request...")
         async with session.post(ROBLOX_SIGNUP_URL, json=payload) as resp:
+            resp_text = await resp.text()
+            print(f"[*] Status: {resp.status}")
+            print(f"[*] Headers: {dict(resp.headers)}")
+
             if resp.status == 200:
-                data = await resp.json()
+                data = json.loads(resp_text)
                 cookie = resp.cookies.get(".ROBLOSECURITY")
                 return {"success": True, "username": username, "password": password, "userId": data.get("userId"), "cookie": str(cookie) if cookie else None}
 
-            # Extract challenge metadata from headers
             challenge_id = resp.headers.get("rblx-challenge-id")
-            challenge_type = resp.headers.get("rblx-challenge-type")
-            challenge_metadata = resp.headers.get("rblx-challenge-metadata")
+            challenge_metadata_b64 = resp.headers.get("rblx-challenge-metadata")
 
-            if not challenge_metadata:
-                data = await resp.json()
-                errors = data.get("errors", [])
-                err = errors[0].get("message", "Unknown") if errors else str(data)
+            print(f"[*] Challenge ID: {challenge_id}")
+            print(f"[*] Challenge Metadata: {challenge_metadata_b64}")
+
+            if not challenge_id or not challenge_metadata_b64:
+                try:
+                    data = json.loads(resp_text)
+                    errors = data.get("errors", [])
+                    err = errors[0].get("message", resp_text) if errors else resp_text
+                except:
+                    err = resp_text
                 return {"success": False, "error": err}
 
-            # Decode metadata to get blob
+            # Decode metadata
             try:
-                metadata = json.loads(base64.b64decode(challenge_metadata))
-                data_blob = metadata.get("dataExchangeBlob") or metadata.get("blob")
+                metadata = json.loads(base64.b64decode(challenge_metadata_b64))
+                print(f"[*] Decoded metadata: {metadata}")
+                blob = metadata.get("dataExchangeBlob")
                 unified_captcha_id = metadata.get("unifiedCaptchaId")
-                print(f"[*] Challenge ID: {challenge_id}")
-                print(f"[*] Got captcha blob")
             except Exception as e:
-                return {"success": False, "error": f"Failed to parse challenge: {e}"}
+                return {"success": False, "error": f"Failed to parse metadata: {e}"}
 
-        # Solve captcha with blob
+        # Solve captcha
         print("[*] Solving captcha...")
-        captcha = await solve_captcha(proxy, data_blob)
+        captcha = await solve_captcha(proxy, blob)
         if not captcha.get("success"):
-            return {"success": False, "error": f"Captcha failed: {captcha.get('error')}"}
-        print("[+] Captcha solved!")
+            return {"success": False, "error": f"Captcha: {captcha.get('error')}"}
 
-        # Build challenge response
         captcha_token = captcha.get("token")
-        challenge_response = json.dumps({"unifiedCaptchaId": unified_captcha_id, "captchaToken": captcha_token, "actionType": "Signup"})
-        challenge_response_b64 = base64.b64encode(challenge_response.encode()).decode()
+        print(f"[+] Captcha solved! Token: {captcha_token[:50]}...")
 
-        # Retry with challenge headers
+        # Continue the challenge
+        print("[*] Continuing challenge...")
         csrf = await get_csrf_token(session)
+        if csrf:
+            session.headers.update({"x-csrf-token": csrf})
+
+        continue_result = await continue_challenge(session, challenge_id, captcha_token, unified_captcha_id)
+        print(f"[*] Continue result: {continue_result}")
+
+        # Retry signup with challenge headers
+        challenge_response = {
+            "unifiedCaptchaId": unified_captcha_id,
+            "captchaToken": captcha_token,
+            "actionType": "Signup"
+        }
+
         session.headers.update({
-            "x-csrf-token": csrf,
             "rblx-challenge-id": challenge_id,
-            "rblx-challenge-type": challenge_type or "captcha",
-            "rblx-challenge-metadata": challenge_response_b64,
+            "rblx-challenge-type": "captcha",
+            "rblx-challenge-metadata": base64.b64encode(json.dumps(challenge_response).encode()).decode(),
         })
 
-        print("[*] Creating account...")
+        print("[*] Final signup attempt...")
         async with session.post(ROBLOX_SIGNUP_URL, json=payload) as resp:
-            data = await resp.json()
+            resp_text = await resp.text()
+            print(f"[*] Status: {resp.status}")
+
             if resp.status == 200:
+                data = json.loads(resp_text)
                 cookie = resp.cookies.get(".ROBLOSECURITY")
                 return {"success": True, "username": username, "password": password, "userId": data.get("userId"), "cookie": str(cookie) if cookie else None}
 
-            errors = data.get("errors", [])
-            err = errors[0].get("message", "Unknown") if errors else str(data)
+            try:
+                data = json.loads(resp_text)
+                errors = data.get("errors", [])
+                err = errors[0].get("message", resp_text) if errors else resp_text
+            except:
+                err = resp_text
             return {"success": False, "error": err}
 
 
@@ -224,7 +267,7 @@ async def main():
     print("=" * 50)
 
     if not PROXY:
-        print("\n[!] ERROR: Set PROXY in script")
+        print("[!] Set PROXY in script")
         return
 
     print(f"[*] Proxy: {PROXY[:40]}...")
@@ -249,11 +292,10 @@ async def main():
             print(f"[-] FAILED: {result.get('error')}")
 
         if i < count - 1:
-            print("[*] Waiting 5 seconds...")
             await asyncio.sleep(5)
 
     print(f"\n{'=' * 50}")
-    print(f"Done! Created {success_count}/{count} accounts")
+    print(f"Done! {success_count}/{count} accounts")
     print(f"Saved to: {OUTPUT_FILE}")
 
 
