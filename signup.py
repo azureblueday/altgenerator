@@ -36,13 +36,15 @@ ENABLE_POW = True
 MAX_ATTEMPTS = 8
 
 # Proxies: socks5://user:pass@host:port  (rotated per account)
-PROXIES = [
-    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-ixxth9zidj_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-f2wus2c6iv_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-9n5pl0ix7f_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-2txwnok7vs_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-v5z2qcps8m_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-]
+# Legion proxy template. {SID} is replaced with a fresh random session ID
+# per request, so the local Roblox connection and the FunBypass solve each
+# get their OWN sticky session (no concurrent-use conflict).
+PROXY_TEMPLATE = "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-{SID}_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337"
+
+
+def mint_proxy() -> str:
+    sid = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+    return PROXY_TEMPLATE.format(SID=sid)
 
 # ─────────────────────────────────────────────────────────────
 # WORD LISTS (human-like usernames)
@@ -201,9 +203,11 @@ async def check_username(session: aiohttp.ClientSession, username: str, birthday
         return False
 
 
-async def signup_once(proxy: str) -> dict:
+async def signup_once() -> dict:
+    proxy_local = mint_proxy()   # for our Roblox connection
+    proxy_fb = mint_proxy()      # separate session for FunBypass solve
     timeout = aiohttp.ClientTimeout(total=60)
-    connector = make_connector(proxy) if HAS_SOCKS else None
+    connector = make_connector(proxy_local) if HAS_SOCKS else None
     async with aiohttp.ClientSession(headers=ROBLOX_HEADERS, timeout=timeout, connector=connector) as session:
         # 1. Find an available username
         print("  [*] Finding username...")
@@ -276,7 +280,7 @@ async def signup_once(proxy: str) -> dict:
                 website_url="https://www.roblox.com/account/signupredir",
                 website_public_key=ROBLOX_SIGNUP_KEY,
                 website_subdomain="roblox-api",
-                proxy=proxy,
+                proxy=proxy_fb,
                 data=data_arg,
             )
         print("  [+] Captcha solved!")
@@ -320,24 +324,22 @@ async def signup_once(proxy: str) -> dict:
             return {"success": False, "error": err}
 
 
-async def signup(proxy_pool) -> dict:
-    """Try signup, rotating proxies when the solve/handoff fails."""
+async def signup() -> dict:
+    """Try signup, minting fresh proxy sessions when the solve/handoff fails."""
     last_err = "unknown"
     for attempt in range(MAX_ATTEMPTS):
-        proxy = random.choice(proxy_pool)
         try:
-            result = await signup_once(proxy)
+            result = await signup_once()
             if result.get("success"):
                 return result
             last_err = result.get("error", "unknown") or "empty error"
-            # Permanent (non-retryable) errors: username/validation issues
             permanent = any(w in last_err.lower() for w in ["username", "password", "exist", "taken", "invalid"])
             if permanent:
                 return result
-            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} failed ({last_err}), rotating proxy...")
+            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} failed ({last_err}), retrying...")
         except Exception as e:
             last_err = str(e) or repr(e)
-            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} error ({last_err}), rotating proxy...")
+            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} error ({last_err}), retrying...")
         await asyncio.sleep(1)
     return {"success": False, "error": last_err}
 
@@ -346,7 +348,7 @@ async def main():
     print("=" * 50)
     print("Roblox Account Generator")
     print("=" * 50)
-    print(f"Loaded {len(PROXIES)} proxies")
+    print("Using Legion pool-udp LA proxies (fresh session per request)")
 
     if not HAS_SOCKS:
         print("\n[!] aiohttp_socks is NOT installed - Roblox requests will use")
@@ -371,7 +373,7 @@ async def main():
     success = 0
     for i in range(count):
         print(f"\n[{i+1}/{count}] Creating account...")
-        result = await signup(PROXIES)
+        result = await signup()
 
         if result.get("success"):
             combo = f"{result['username']}:{result['password']}"
