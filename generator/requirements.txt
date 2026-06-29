@@ -1,0 +1,4 @@
+primp
+curl_cffi
+colorama
+cryptography

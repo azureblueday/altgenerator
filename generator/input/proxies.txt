@@ -1,0 +1,5 @@
+socks5://uorder40767_pool-udp_country-US_session-v7xcckad3h_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337
+socks5://uorder40767_pool-udp_country-US_session-iyv7s7h5mr_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337
+socks5://uorder40767_pool-udp_country-US_session-v12xz1na8x_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337
+socks5://uorder40767_pool-udp_country-US_session-sgaeqtp6o8_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337
+socks5://uorder40767_pool-udp_country-US_session-8dfoupak5d_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337
