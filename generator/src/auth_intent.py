@@ -30,7 +30,7 @@ class AuthIntent:
         return b64encode(signature).decode('utf-8')
 
     @staticmethod
-    def get_auth_intent(session: requests.Session) -> dict | None:
+    def get_auth_intent(session: requests.Session):
         try:
             key_pair = AuthIntent.generate_signing_key_pair_unextractable()
             private_key, public_key = key_pair
