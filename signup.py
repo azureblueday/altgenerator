@@ -226,8 +226,9 @@ async def signup_once(proxy: str) -> dict:
                 try:
                     err = json.loads(text)["errors"][0]["message"]
                 except Exception:
-                    err = text[:160]
-                return {"success": False, "error": err}
+                    err = text[:160].strip() or "(empty body)"
+                print(f"  [debug] no challenge. status={resp.status} body={text[:200]!r}")
+                return {"success": False, "error": f"HTTP {resp.status}: {err}"}
 
         # 4. Decode challenge metadata -> blob + unifiedCaptchaId + actionType
         try:
