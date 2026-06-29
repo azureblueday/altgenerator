@@ -174,27 +174,71 @@ class FunbypassAPI:
 class RobloxSignup:
     """Handle Roblox account signup"""
 
+    ADJECTIVES = [
+        "Cool", "Epic", "Swift", "Dark", "Bright", "Silent", "Wild", "Lucky", "Brave", "Mighty",
+        "Crazy", "Happy", "Sneaky", "Royal", "Golden", "Silver", "Crystal", "Shadow", "Storm", "Fire",
+        "Ice", "Thunder", "Mystic", "Cosmic", "Turbo", "Ultra", "Mega", "Super", "Hyper", "Pro",
+        "Elite", "Prime", "Alpha", "Omega", "Nova", "Neon", "Pixel", "Cyber", "Ninja", "Phantom",
+        "Rapid", "Stealth", "Blaze", "Frost", "Atomic", "Sonic", "Laser", "Rocket", "Venom", "Titan"
+    ]
+
+    NOUNS = [
+        "Wolf", "Dragon", "Phoenix", "Tiger", "Eagle", "Lion", "Shark", "Bear", "Hawk", "Cobra",
+        "Panther", "Viper", "Fox", "Raven", "Falcon", "Jaguar", "Lynx", "Puma", "Raptor", "Scorpion",
+        "Blade", "Storm", "Knight", "Warrior", "Hunter", "Ranger", "Sniper", "Raider", "Slayer", "Master",
+        "King", "Lord", "Boss", "Chief", "Ace", "Star", "Legend", "Hero", "Champ", "Wizard",
+        "Gamer", "Player", "Killer", "Winner", "Runner", "Rider", "Striker", "Crusher", "Breaker", "Blazer"
+    ]
+
+    NAMES = [
+        "Alex", "Max", "Jake", "Ryan", "Kyle", "Mike", "Nick", "Sam", "Chris", "Matt",
+        "Luke", "Zack", "Cole", "Drew", "Seth", "Josh", "Evan", "Adam", "Eric", "Mark",
+        "Lily", "Emma", "Mia", "Zoe", "Luna", "Aria", "Nova", "Ivy", "Ruby", "Sky",
+        "Jack", "Leo", "Kai", "Finn", "Owen", "Liam", "Noah", "Eli", "Jax", "Rex"
+    ]
+
     def __init__(self, funbypass: FunbypassAPI):
         self.funbypass = funbypass
         self.csrf_token = None
 
-    def generate_username(self, length: int = 12) -> str:
-        """Generate a random username"""
-        chars = string.ascii_lowercase + string.digits
-        return ''.join(random.choices(chars, k=length))
+    def generate_username(self) -> str:
+        """Generate a human-like username"""
+        style = random.randint(1, 5)
 
-    def generate_password(self, length: int = 16) -> str:
-        """Generate a secure random password"""
-        chars = string.ascii_letters + string.digits + "!@#$%"
-        password = [
-            random.choice(string.ascii_uppercase),
-            random.choice(string.ascii_lowercase),
-            random.choice(string.digits),
-            random.choice("!@#$%"),
-        ]
-        password += random.choices(chars, k=length - 4)
-        random.shuffle(password)
-        return ''.join(password)
+        if style == 1:
+            adj = random.choice(self.ADJECTIVES)
+            noun = random.choice(self.NOUNS)
+            num = random.randint(1, 999)
+            return f"{adj}{noun}{num}"
+        elif style == 2:
+            name = random.choice(self.NAMES)
+            noun = random.choice(self.NOUNS)
+            num = random.randint(0, 99)
+            return f"{name}{noun}{num}" if num > 0 else f"{name}{noun}"
+        elif style == 3:
+            name = random.choice(self.NAMES)
+            num = random.randint(100, 9999)
+            suffix = random.choice(["_", "x", "X", ""])
+            return f"{name}{suffix}{num}"
+        elif style == 4:
+            adj = random.choice(self.ADJECTIVES)
+            name = random.choice(self.NAMES)
+            num = random.randint(1, 99)
+            return f"{adj}{name}{num}"
+        else:
+            noun1 = random.choice(self.NOUNS)
+            noun2 = random.choice(self.NOUNS)
+            num = random.randint(1, 99)
+            sep = random.choice(["_", "", "x"])
+            return f"{noun1}{sep}{noun2}{num}"
+
+    def generate_password(self) -> str:
+        """Generate a strong random password"""
+        word1 = random.choice(self.ADJECTIVES + self.NOUNS)
+        word2 = random.choice(self.ADJECTIVES + self.NOUNS)
+        num = random.randint(100, 999)
+        special = random.choice("!@#$%&")
+        return f"{word1}{word2}{num}{special}"
 
     def generate_birthday(self) -> str:
         """Generate a random birthday (18-25 years old)"""
