@@ -60,16 +60,21 @@ async def get_csrf(session: aiohttp.ClientSession) -> str:
 
 async def check_balance() -> dict:
     async with aiohttp.ClientSession() as session:
-        async with session.post(f"{FUNBYPASS_BASE_URL}/getBalance", json={"clientKey": FUNBYPASS_API_KEY}) as resp:
-            if resp.status != 200:
-                return {"success": False, "error": f"Status {resp.status}"}
+        for attempt in range(3):
             try:
-                result = await resp.json()
-                if result.get("errorId") == 0:
-                    return {"success": True, "balance": result.get("balance")}
-                return {"success": False, "error": result.get("errorCode")}
-            except:
-                return {"success": False, "error": "Invalid response"}
+                async with session.post(f"{FUNBYPASS_BASE_URL}/getBalance", json={"clientKey": FUNBYPASS_API_KEY}) as resp:
+                    if resp.status != 200:
+                        print(f"[*] Retry {attempt+1}/3 (status {resp.status})...")
+                        await asyncio.sleep(2)
+                        continue
+                    result = await resp.json()
+                    if result.get("errorId") == 0:
+                        return {"success": True, "balance": result.get("balance")}
+                    return {"success": False, "error": result.get("errorCode")}
+            except Exception as e:
+                print(f"[*] Retry {attempt+1}/3 ({e})...")
+                await asyncio.sleep(2)
+        return {"success": False, "error": "API unavailable after 3 retries"}
 
 
 async def solve_captcha(proxy: str) -> dict:
@@ -84,20 +89,26 @@ async def solve_captcha(proxy: str) -> dict:
             "proxy": proxy,
         }
 
-        async with session.post(f"{FUNBYPASS_BASE_URL}/createTask", json={"clientKey": FUNBYPASS_API_KEY, "task": task}) as resp:
-            if resp.status != 200:
-                text = await resp.text()
-                print(f"[-] API error ({resp.status}): {text[:100]}")
-                return {"success": False, "error": f"API returned {resp.status}"}
+        task_id = None
+        for attempt in range(3):
             try:
-                result = await resp.json()
-            except:
-                text = await resp.text()
-                return {"success": False, "error": f"Invalid response: {text[:100]}"}
-            if result.get("errorId") != 0:
-                return {"success": False, "error": result.get("errorCode", result.get("errorDescription", "Task failed"))}
-            task_id = result.get("taskId")
-            print(f"[*] Task: {task_id}")
+                async with session.post(f"{FUNBYPASS_BASE_URL}/createTask", json={"clientKey": FUNBYPASS_API_KEY, "task": task}) as resp:
+                    if resp.status != 200:
+                        print(f"[*] Retry {attempt+1}/3 (status {resp.status})...")
+                        await asyncio.sleep(2)
+                        continue
+                    result = await resp.json()
+                    if result.get("errorId") != 0:
+                        return {"success": False, "error": result.get("errorCode", result.get("errorDescription", "Task failed"))}
+                    task_id = result.get("taskId")
+                    print(f"[*] Task: {task_id}")
+                    break
+            except Exception as e:
+                print(f"[*] Retry {attempt+1}/3 ({e})...")
+                await asyncio.sleep(2)
+
+        if not task_id:
+            return {"success": False, "error": "Failed to create task after 3 retries"}
 
         start = time.time()
         while time.time() - start < 180:
@@ -217,8 +228,7 @@ async def main():
     if bal.get("success"):
         print(f"[+] Balance: ${bal.get('balance')}")
     else:
-        print(f"[-] Balance check failed: {bal.get('error')}")
-        return
+        print(f"[!] Balance check failed: {bal.get('error')} - continuing anyway...")
 
     try:
         count = int(input("\nHow many accounts? "))
