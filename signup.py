@@ -72,7 +72,15 @@ async def solve_captcha(proxy: str) -> dict:
         }
 
         async with session.post(f"{FUNBYPASS_BASE_URL}/createTask", json={"clientKey": FUNBYPASS_API_KEY, "task": task}) as resp:
-            result = await resp.json()
+            if resp.status != 200:
+                text = await resp.text()
+                print(f"[-] API error ({resp.status}): {text[:100]}")
+                return {"success": False, "error": f"API returned {resp.status}"}
+            try:
+                result = await resp.json()
+            except:
+                text = await resp.text()
+                return {"success": False, "error": f"Invalid response: {text[:100]}"}
             if result.get("errorId") != 0:
                 return {"success": False, "error": result.get("errorCode", result.get("errorDescription", "Task failed"))}
             task_id = result.get("taskId")
