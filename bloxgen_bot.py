@@ -233,12 +233,9 @@ class RobloxSignup:
             return f"{noun1}{sep}{noun2}{num}"
 
     def generate_password(self) -> str:
-        """Generate a strong random password"""
-        word1 = random.choice(self.ADJECTIVES + self.NOUNS)
-        word2 = random.choice(self.ADJECTIVES + self.NOUNS)
-        num = random.randint(100, 999)
-        special = random.choice("!@#$%&")
-        return f"{word1}{word2}{num}{special}"
+        """Generate a 10 character alphanumeric password"""
+        chars = string.ascii_letters + string.digits
+        return ''.join(random.choices(chars, k=10))
 
     def generate_birthday(self) -> str:
         """Generate a random birthday (18-25 years old)"""
