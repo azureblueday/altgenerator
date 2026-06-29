@@ -13,7 +13,14 @@ ROBLOX_USERNAME_CHECK_URL = "https://auth.roblox.com/v1/usernames/validate"
 ROBLOX_CAPTCHA_KEY = "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F"
 OUTPUT_FILE = "accounts.txt"
 
-PROXY = "http://RXClbNH987_lightning_proxy-country-any:1853reph11@resident.lightningproxies.net:8080"
+# Proxies in format socks5://user:pass@host:port - rotated per account
+PROXIES = [
+    "socks5://uorder40767_session-vwyxja4eh0_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_session-he6r25e152_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_session-w9n5axekvu_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_session-k2iujnqxk8_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_session-yqg3jbhi4c_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+]
 
 # Headers to avoid being blocked by the API gateway/CDN
 FB_HEADERS = {
@@ -229,7 +236,7 @@ async def main():
     print("=" * 50)
     print("Roblox Account Generator")
     print("=" * 50)
-    print(f"Proxy: {PROXY[:50]}...")
+    print(f"Loaded {len(PROXIES)} proxies")
 
     # Check balance first
     print("[*] Checking Funbypass balance...")
@@ -247,7 +254,8 @@ async def main():
     success = 0
     for i in range(count):
         print(f"\n[{i+1}/{count}] Creating account...")
-        result = await signup(PROXY)
+        proxy = random.choice(PROXIES)
+        result = await signup(proxy)
 
         if result.get("success"):
             combo = f"{result['username']}:{result['password']}"
