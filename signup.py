@@ -13,7 +13,7 @@ ROBLOX_USERNAME_CHECK_URL = "https://auth.roblox.com/v1/usernames/validate"
 ROBLOX_CAPTCHA_KEY = "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F"
 OUTPUT_FILE = "accounts.txt"
 
-PROXY = "http://1I2zNUuGf_lightning_proxy-country-any:0azv9rghjq@resident.lightningproxies.net:8080"
+PROXY = "http://RXClbNH987_lightning_proxy-country-any:1853reph11@resident.lightningproxies.net:8080"
 
 ADJECTIVES = ["Cool", "Epic", "Swift", "Dark", "Bright", "Silent", "Wild", "Lucky", "Brave", "Mighty", "Crazy", "Happy", "Royal", "Golden", "Silver", "Shadow", "Storm", "Fire", "Ice", "Thunder"]
 NOUNS = ["Wolf", "Dragon", "Phoenix", "Tiger", "Eagle", "Lion", "Shark", "Bear", "Hawk", "Cobra", "Panther", "Fox", "Raven", "Falcon", "Jaguar", "Blade", "Knight", "Warrior", "Hunter", "Ranger"]
