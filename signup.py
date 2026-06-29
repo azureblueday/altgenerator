@@ -7,6 +7,12 @@ import json
 import time
 from datetime import datetime
 
+try:
+    from aiohttp_socks import ProxyConnector, ProxyType
+    HAS_SOCKS = True
+except ImportError:
+    HAS_SOCKS = False
+
 # ─────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────
@@ -65,6 +71,23 @@ def generate_password() -> str:
 def generate_birthday() -> str:
     year = random.randint(datetime.now().year - 25, datetime.now().year - 18)
     return f"{year}-{random.randint(1,12):02d}-{random.randint(1,28):02d}T00:00:00.000Z"
+
+
+def make_connector(proxy: str):
+    """Build a SOCKS5 ProxyConnector from a 'socks5://user:pass@host:port' string.
+    Parsed manually because the username can contain spaces/underscores."""
+    rest = proxy.split("://", 1)[1]
+    creds, hostport = rest.rsplit("@", 1)
+    user, pwd = creds.split(":", 1)
+    host, port = hostport.rsplit(":", 1)
+    return ProxyConnector(
+        proxy_type=ProxyType.SOCKS5,
+        host=host,
+        port=int(port),
+        username=user,
+        password=pwd,
+        rdns=True,
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -180,7 +203,8 @@ async def check_username(session: aiohttp.ClientSession, username: str, birthday
 
 async def signup_once(proxy: str) -> dict:
     timeout = aiohttp.ClientTimeout(total=60)
-    async with aiohttp.ClientSession(headers=ROBLOX_HEADERS, timeout=timeout) as session:
+    connector = make_connector(proxy) if HAS_SOCKS else None
+    async with aiohttp.ClientSession(headers=ROBLOX_HEADERS, timeout=timeout, connector=connector) as session:
         # 1. Find an available username
         print("  [*] Finding username...")
         username = None
@@ -323,6 +347,13 @@ async def main():
     print("Roblox Account Generator")
     print("=" * 50)
     print(f"Loaded {len(PROXIES)} proxies")
+
+    if not HAS_SOCKS:
+        print("\n[!] aiohttp_socks is NOT installed - Roblox requests will use")
+        print("[!] your real IP and hit HTTP 429. Install it with:")
+        print("[!]   pip3 install aiohttp_socks\n")
+    else:
+        print("[+] Routing Roblox requests through SOCKS5 proxies")
 
     # Balance check
     try:
