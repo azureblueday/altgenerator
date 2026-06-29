@@ -85,18 +85,23 @@ async def solve_captcha(proxy: str) -> dict:
                 result = await resp.json()
                 status = result.get("status")
 
+                elapsed = int(time.time() - start)
+                if elapsed % 5 == 0:
+                    print(f"[*] Status: {status} ({elapsed}s)")
+
                 if status == "ready":
                     if result.get("errorId") == 0:
                         token = result.get("solution", {}).get("token")
                         print(f"[+] Solved!")
                         return {"success": True, "token": token}
-                    return {"success": False, "error": result.get("errorCode", "Failed")}
+                    err = f"{result.get('errorCode')}: {result.get('errorDescription')}"
+                    print(f"[-] Error: {err}")
+                    return {"success": False, "error": err}
                 elif status == "failure":
-                    return {"success": False, "error": result.get("errorCode", "Failed")}
-
-                elapsed = int(time.time() - start)
-                if elapsed % 10 == 0:
-                    print(f"[*] Waiting... ({elapsed}s)")
+                    err = f"{result.get('errorCode')}: {result.get('errorDescription')}"
+                    print(f"[-] Failed: {err}")
+                    print(f"[-] Full response: {result}")
+                    return {"success": False, "error": err}
 
         return {"success": False, "error": "Timeout"}
 
