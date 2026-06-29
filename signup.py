@@ -23,11 +23,11 @@ USE_BLOB = True
 
 # Proxies: socks5://user:pass@host:port  (rotated per account)
 PROXIES = [
-    "socks5://uorder40767_session-vwyxja4eh0_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_session-he6r25e152_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_session-w9n5axekvu_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_session-k2iujnqxk8_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_session-yqg3jbhi4c_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-ushu47nvol_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-xdcp9ftd4j_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-qr1b7dtnum_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-qdpseqiwiz_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_session-2y17t0rrov_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
 ]
 
 # ─────────────────────────────────────────────────────────────
