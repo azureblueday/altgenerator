@@ -21,13 +21,21 @@ OUTPUT_FILE = "accounts.txt"
 # handle the whole session generically (False). Flip this to compare.
 USE_BLOB = True
 
+# Let FunBypass handle Arkose Proof-of-Work. Roblox needs it; only flip
+# to False to experiment if you keep getting ERROR_SOLVE_FAILED: pow.
+ENABLE_POW = True
+
+# How many times to retry a single account when the solve fails
+# (FunBypass intermittently returns ERROR_MAKE_REQUEST / pow).
+MAX_ATTEMPTS = 8
+
 # Proxies: socks5://user:pass@host:port  (rotated per account)
 PROXIES = [
-    "socks5://uorder40767_pool-udp_country-US_session-ushu47nvol_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_session-xdcp9ftd4j_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_session-qr1b7dtnum_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_session-qdpseqiwiz_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
-    "socks5://uorder40767_pool-udp_country-US_session-2y17t0rrov_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-ixxth9zidj_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-f2wus2c6iv_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-9n5pl0ix7f_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-2txwnok7vs_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
+    "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-v5z2qcps8m_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337",
 ]
 
 # ─────────────────────────────────────────────────────────────
@@ -84,7 +92,7 @@ class FunBypass:
             "websitePublicKey": website_public_key,
             "websiteSubdomain": website_subdomain,
             "proxy": proxy,
-            "enablePOW": True,
+            "enablePOW": ENABLE_POW,
         }
         if data:
             task["data"] = data
@@ -288,22 +296,23 @@ async def signup_once(proxy: str) -> dict:
 
 
 async def signup(proxy_pool) -> dict:
-    """Try signup, rotating proxies if the captcha solve fails."""
+    """Try signup, rotating proxies when the solve/handoff fails."""
     last_err = "unknown"
-    for attempt in range(4):
+    for attempt in range(MAX_ATTEMPTS):
         proxy = random.choice(proxy_pool)
         try:
             result = await signup_once(proxy)
             if result.get("success"):
                 return result
-            last_err = result.get("error", "unknown")
-            # If it's a username/non-captcha error, no point rotating proxy
-            if "captcha" not in last_err.lower() and "blob" not in last_err.lower() and "challenge" not in last_err.lower():
+            last_err = result.get("error", "unknown") or "empty error"
+            # Permanent (non-retryable) errors: username/validation issues
+            permanent = any(w in last_err.lower() for w in ["username", "password", "exist", "taken", "invalid"])
+            if permanent:
                 return result
-            print(f"  [*] Attempt {attempt+1}/4 failed ({last_err}), rotating proxy...")
+            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} failed ({last_err}), rotating proxy...")
         except Exception as e:
-            last_err = str(e)
-            print(f"  [*] Attempt {attempt+1}/4 error ({last_err}), rotating proxy...")
+            last_err = str(e) or repr(e)
+            print(f"  [*] Attempt {attempt+1}/{MAX_ATTEMPTS} error ({last_err}), rotating proxy...")
         await asyncio.sleep(1)
     return {"success": False, "error": last_err}
 
