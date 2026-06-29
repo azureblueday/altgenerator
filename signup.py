@@ -13,8 +13,8 @@ ROBLOX_CAPTCHA_KEY = "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F"
 OUTPUT_FILE = "accounts.txt"
 
 # Set your proxy here (required for captcha solving)
-# Format: http://user:pass@ip:port or http://ip:port
-PROXY = ""  # Example: "http://user:pass@123.45.67.89:8080"
+# Format: http://user:pass@ip:port
+PROXY = "http://1I2zNUuGf_lightning_proxy-country-any:0azv9rghjq@resident.lightningproxies.net:8080"
 
 ADJECTIVES = [
     "Cool", "Epic", "Swift", "Dark", "Bright", "Silent", "Wild", "Lucky", "Brave", "Mighty",
