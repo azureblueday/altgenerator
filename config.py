@@ -6,7 +6,7 @@ BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 
 # API Keys
 BLOXGEN_API_KEY = "BLOX-XXXXXXXXXXXXXXXX"  # Bloxgen API key for pre-made accounts
-FUNBYPASS_API_KEY = "FUN-UX2841S4ZI281AVK"  # Funbypass API key for captcha solving
+FUNBYPASS_API_KEY = "FUN-33KUYP1WTQP4W91M"  # Funbypass API key for captcha solving
 
 # Role Configuration
 PREMIUM_ROLE_NAME = "Premium"  # Premium role for better limits
