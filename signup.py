@@ -58,6 +58,20 @@ async def get_csrf(session: aiohttp.ClientSession) -> str:
         return ""
 
 
+async def check_balance() -> dict:
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{FUNBYPASS_BASE_URL}/getBalance", json={"clientKey": FUNBYPASS_API_KEY}) as resp:
+            if resp.status != 200:
+                return {"success": False, "error": f"Status {resp.status}"}
+            try:
+                result = await resp.json()
+                if result.get("errorId") == 0:
+                    return {"success": True, "balance": result.get("balance")}
+                return {"success": False, "error": result.get("errorCode")}
+            except:
+                return {"success": False, "error": "Invalid response"}
+
+
 async def solve_captcha(proxy: str) -> dict:
     print("[*] Solving captcha (this may take 30-60 seconds)...")
 
@@ -89,7 +103,14 @@ async def solve_captcha(proxy: str) -> dict:
         while time.time() - start < 180:
             await asyncio.sleep(1)
             async with session.get(f"{FUNBYPASS_BASE_URL}/getTaskResult/{task_id}") as resp:
-                result = await resp.json()
+                if resp.status != 200 and resp.status != 202:
+                    print(f"[*] API returned {resp.status}, retrying...")
+                    continue
+                try:
+                    result = await resp.json()
+                except:
+                    print(f"[*] Invalid JSON, retrying...")
+                    continue
                 status = result.get("status")
 
                 elapsed = int(time.time() - start)
@@ -189,6 +210,15 @@ async def main():
     print("Roblox Account Generator")
     print("=" * 50)
     print(f"Proxy: {PROXY[:50]}...")
+
+    # Check balance first
+    print("[*] Checking Funbypass balance...")
+    bal = await check_balance()
+    if bal.get("success"):
+        print(f"[+] Balance: ${bal.get('balance')}")
+    else:
+        print(f"[-] Balance check failed: {bal.get('error')}")
+        return
 
     try:
         count = int(input("\nHow many accounts? "))
