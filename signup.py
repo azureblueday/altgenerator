@@ -39,7 +39,9 @@ MAX_ATTEMPTS = 8
 # Legion proxy template. {SID} is replaced with a fresh random session ID
 # per request, so the local Roblox connection and the FunBypass solve each
 # get their OWN sticky session (no concurrent-use conflict).
-PROXY_TEMPLATE = "socks5://uorder40767_pool-udp_country-US_city-los angeles_session-{SID}_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337"
+# NOTE: no city -> avoids a space in the proxy string. FunBypass's proxy
+# parser rejects spaces ("city-los angeles"), causing ERROR_MAKE_REQUEST.
+PROXY_TEMPLATE = "socks5://uorder40767_pool-udp_country-US_session-{SID}_sesstime-1440:dpPri5RW6ocHSyoN@budget.legionproxy.io:1337"
 
 
 def mint_proxy() -> str:
